@@ -30,7 +30,7 @@ def get_lat_lng(place_name):
         st.error(f"주소 검색 오류: {e}")
     return None, None
 
-# 1. 요청하신 이름으로 초기 데이터 설정
+# 1. 7명의 초기 데이터 설정
 initial_members = [
     {"이름": "재진형", "출발지": "서울시청", "위도": 37.5665, "경도": 126.9780},
     {"이름": "진환형", "출발지": "판교역", "위도": 37.3943, "경도": 127.1114},
@@ -46,14 +46,14 @@ if not os.path.exists(DATA_FILE):
     pd.DataFrame(initial_members).to_csv(DATA_FILE, index=False)
 
 # 현재 데이터 불러오기
-# 현재 데이터 불러오기
 df_members = pd.read_csv(DATA_FILE)
 
-# 💡 이전 버전의 잔재("출발지(장소/주소)")가 남아있다면 "출발지"로 이름 변경!
-if "출발지(장소/주소)" in df_members.columns:
-    df_members.rename(columns={"출발지(장소/주소)": "출발지"}, inplace=True)
-    df_members.to_csv(DATA_FILE, index=False) # 바뀐 이름으로 덮어쓰기
-
+# 💡 [핵심 에러 방어 코드] 
+# 서버에 있는 파일이 옛날 버전이라서 "출발지" 열이 없다면, 에러 내지 말고 최신 양식으로 덮어씌움
+required_columns = ["이름", "출발지", "위도", "경도"]
+if not all(col in df_members.columns for col in required_columns):
+    df_members = pd.DataFrame(initial_members)
+    df_members.to_csv(DATA_FILE, index=False)
 
 # 추천 여행지
 destinations = [
@@ -81,7 +81,54 @@ with col1:
                 if lat and lng:
                     new_rows.append({"이름": row["이름"], "출발지": row["출발지"], "위도": lat, "경도": lng})
                 else:
-                    # 검색 실패 시 기존 데이터 유지
-                    old_lat = df_members.iloc[idx]["위도"] if idx < len(df_members) else 37.5665
-                    old_lng = df_members.iloc[idx]["경도"] if idx < len(df_members) else 126.9780
-                    new_rows
+                    # 검색 실패 시 기존 데이터 유지 (안전 장치)
+                    try:
+                        old_lat = df_members.iloc[idx]["위도"]
+                        old_lng = df_members.iloc[idx]["경도"]
+                    except IndexError:
+                        old_lat, old_lng = 37.5665, 126.9780 # 새로 추가된 사람인데 검색 실패하면 서울시청
+                    
+                    new_rows.append({"이름": row["이름"], "출발지": row["출발지"], "위도": old_lat, "경도": old_lng})
+            
+            final_df = pd.DataFrame(new_rows)
+            final_df.to_csv(DATA_FILE, index=False)
+            st.success("✅ 저장이 완료되었습니다!")
+            st.rerun()
+
+    # 중앙 지점 계산
+    center_lat = df_members["위도"].mean()
+    center_lng = df_members["경도"].mean()
+    
+    st.info(f"💡 **중간 지점 기준 길찾기**")
+    for dest in destinations:
+        url = f"https://map.kakao.com/link/to/{dest['장소명']},{dest['위도']},{dest['경도']}"
+        st.markdown(f"- [{dest['장소명']} 경로 보기]({url})")
+
+with col2:
+    st.subheader("🗺️ 실시간 동선 지도")
+    m = folium.Map(location=[center_lat, center_lng], zoom_start=9)
+    
+    # 멤버 마커 (빨간색)
+    for _, row in df_members.iterrows():
+        folium.Marker(
+            [row["위도"], row["경도"]],
+            tooltip=f"{row['이름']} ({row['출발지']})",
+            icon=folium.Icon(color="red", icon="user")
+        ).add_to(m)
+        
+    # 중간 지점 마커 (보라색 별)
+    folium.Marker(
+        [center_lat, center_lng],
+        popup="🔥 중간 지점",
+        icon=folium.Icon(color="purple", icon="star")
+    ).add_to(m)
+
+    # 여행지 마커 (파란색)
+    for dest in destinations:
+        folium.Marker(
+            [dest["위도"], dest["경도"]],
+            tooltip=dest["장소명"],
+            icon=folium.Icon(color="blue", icon="info-sign")
+        ).add_to(m)
+
+    st_folium(m, width=800, height=600)
