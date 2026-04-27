@@ -7,17 +7,16 @@ import requests
 import streamlit.components.v1 as components
 
 # ---------------------------
-# ✅ 기본 설정 (무조건 최상단)
+# ✅ 기본 설정
 # ---------------------------
 st.set_page_config(page_title="7인팟 여행 플래너", layout="wide")
 
-# ---------------------------
-# 📂 파일 경로
-# ---------------------------
 DATA_FILE = "shared_locations.csv"
 DATE_FILE = "shared_dates.csv"
 
-# 파일 없으면 생성
+# ---------------------------
+# 📂 파일 초기화
+# ---------------------------
 if not os.path.exists(DATA_FILE):
     initial_members = [
         {"이름": "재진형", "출발지": "서울시청", "위도": 37.5665, "경도": 126.9780},
@@ -39,33 +38,28 @@ KAKAO_REST_API_KEY = st.secrets["KAKAO_REST_API_KEY"]
 # ---------------------------
 # 📌 페이지 선택
 # ---------------------------
-page = st.sidebar.radio(
-    "📌 메뉴",
-    ["📅 날짜 조율", "🗺️ 지도 & 출발지"]
-)
+page = st.sidebar.radio("📌 메뉴", ["📅 날짜 조율", "🗺️ 지도 & 출발지"])
 
 # =====================================================
-# 📅 1페이지 - 날짜 조율
+# 📅 1페이지
 # =====================================================
 if page == "📅 날짜 조율":
 
     st.title("📅 여행 날짜 조율")
 
-    # HTML 달력 유지
+    # HTML 달력
     with open("여행.html", "r", encoding="utf-8") as f:
-        html_code = f.read()
-
-    components.html(html_code, height=800, scrolling=True)
+        components.html(f.read(), height=800, scrolling=True)
 
     st.markdown("---")
 
     # 공유 입력
-    st.subheader("📌 (공유용) 안되는 날짜 입력")
+    st.subheader("📌 안되는 날짜 입력")
 
     name = st.text_input("이름")
     dates = st.date_input("안되는 날짜 선택", [])
 
-    if st.button("📌 저장"):
+    if st.button("저장"):
         if name and dates:
             df = pd.read_csv(DATE_FILE)
             new_rows = [{"이름": name, "날짜": str(d)} for d in dates]
@@ -74,7 +68,7 @@ if page == "📅 날짜 조율":
             st.success("✅ 저장 완료")
             st.rerun()
 
-    # 공유 데이터 보기
+    # 데이터 표시
     df_dates = pd.read_csv(DATE_FILE)
 
     if not df_dates.empty:
@@ -88,35 +82,58 @@ if page == "📅 날짜 조율":
 
         st.dataframe(pivot)
 
+        # 🔥 핵심 기능: 최적 날짜 추천
+        st.subheader("🔥 추천 날짜 (안되는 사람 적은 순)")
+
+        count_df = df_dates.groupby("날짜").count().rename(columns={"이름": "불가능 인원"})
+        count_df = count_df.sort_values("불가능 인원")
+
+        st.dataframe(count_df)
+
 # =====================================================
-# 🗺️ 2페이지 - 지도 & 출발지
+# 🗺️ 2페이지
 # =====================================================
 elif page == "🗺️ 지도 & 출발지":
 
     st.title("🗺️ 출발지 & 동선 지도")
 
-    # 📍 좌표 변환 함수
+    # ---------------------------
+    # 📍 좌표 변환 (핵심 개선)
+    # ---------------------------
     def get_lat_lng(place_name):
         if not place_name or str(place_name).strip() == "":
             return None, None
-        
+
+        # 🔥 역 자동 보정
+        if "역" not in place_name:
+            place_name += "역"
+
         url = "https://dapi.kakao.com/v2/local/search/keyword.json"
         headers = {"Authorization": f"KakaoAK {KAKAO_REST_API_KEY}"}
-        params = {"query": place_name}
-        
+        params = {
+            "query": place_name,
+            "category_group_code": "SW8"  # 🔥 지하철역 필터
+        }
+
         try:
             response = requests.get(url, headers=headers, params=params).json()
+
             if response.get('documents'):
-                return float(response['documents'][0]['y']), float(response['documents'][0]['x'])
+                doc = response['documents'][0]
+
+                # 디버깅 (원하면 제거 가능)
+                st.caption(f"📍 {place_name} → {doc['place_name']}")
+
+                return float(doc['y']), float(doc['x'])
+
         except Exception as e:
             st.error(f"주소 검색 오류: {e}")
-        
+
         return None, None
 
     # 데이터 불러오기
     df_members = pd.read_csv(DATA_FILE)
 
-    # 추천 여행지
     destinations = [
         {"장소명": "가평 빠지촌", "위도": 37.8315, "경도": 127.5095},
         {"장소명": "강릉 안목해변", "위도": 37.7714, "경도": 128.9458},
@@ -127,7 +144,7 @@ elif page == "🗺️ 지도 & 출발지":
     col1, col2 = st.columns([1, 2])
 
     # ---------------------------
-    # 🚗 출발지 설정
+    # 🚗 출발지 입력
     # ---------------------------
     with col1:
         st.subheader("🚗 출발지 설정")
@@ -137,8 +154,8 @@ elif page == "🗺️ 지도 & 출발지":
             num_rows="dynamic"
         )
 
-        if st.button("📍 주소 검색 및 저장", type="primary"):
-            with st.spinner("위치 업데이트 중..."):
+        if st.button("📍 좌표 변환 및 저장", type="primary"):
+            with st.spinner("변환 중..."):
                 new_rows = []
 
                 for idx, row in editable_df.iterrows():
@@ -170,9 +187,9 @@ elif page == "🗺️ 지도 & 출발지":
     # 🗺️ 지도
     # ---------------------------
     with col2:
-        st.subheader("🗺️ 실시간 지도")
+        st.subheader("🗺️ 지도")
 
-        df_members = pd.read_csv(DATA_FILE)  # 🔥 다시 읽기 (핵심)
+        df_members = pd.read_csv(DATA_FILE)
 
         center_lat = df_members["위도"].mean()
         center_lng = df_members["경도"].mean()
@@ -204,7 +221,7 @@ elif page == "🗺️ 지도 & 출발지":
 
         st_folium(m, width=800, height=600)
 
-    # 길찾기 링크
+    # 길찾기
     st.markdown("---")
     st.subheader("🚗 추천 여행지 길찾기")
 
