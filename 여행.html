@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1박 2일 여행 날짜 조율기</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #f4f7f6; color: #333; max-width: 900px; margin: 0 auto; padding: 20px; }
+        h1 { text-align: center; color: #2c3e50; font-size: 1.8rem; }
+        .controls { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; text-align: center; }
+        input[type="text"] { padding: 10px 15px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; width: 150px; outline: none; }
+        input[type="text"]:focus { border-color: #3498db; }
+        .instruction { font-size: 0.9em; color: #7f8c8d; margin-top: 10px; }
+        
+        .calendar-container { display: flex; flex-direction: column; gap: 20px; }
+        .month { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .month-title { font-size: 1.3em; font-weight: bold; margin-bottom: 15px; text-align: center; color: #34495e; }
+        
+        .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+        .day-header { text-align: center; font-weight: bold; color: #7f8c8d; font-size: 0.9em; padding-bottom: 5px; }
+        .day-header:nth-child(1) { color: #e74c3c; } 
+        .day-header:nth-child(7) { color: #3498db; } 
+        
+        .day { border: 1px solid #e0e6ed; border-radius: 8px; min-height: 80px; padding: 8px; cursor: pointer; transition: background 0.2s; background: #fff; display: flex; flex-direction: column; gap: 4px; }
+        .day:hover { background: #f1f2f6; border-color: #ced6e0; }
+        .day-num { font-weight: bold; font-size: 0.9em; margin-bottom: 2px; }
+        .sunday { color: #e74c3c; }
+        .saturday { color: #3498db; }
+        
+        .busy-tag { background: #ff7675; color: white; font-size: 0.8em; padding: 3px 6px; border-radius: 4px; display: inline-block; word-break: break-all; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <h1>🏕️ 1박 2일 여행 날짜 조율기 (5~7월)</h1>
+    
+    <div class="controls">
+        <label for="personName"><b>이름: </b></label>
+        <input type="text" id="personName" placeholder="예: 첫째형">
+        <p class="instruction">본인의 이름을 입력하고, <b>안 되는 날짜</b>를 클릭하세요. 한 번 더 클릭하면 취소됩니다.</p>
+    </div>
+
+    <div class="calendar-container" id="calendarContainer"></div>
+
+    <script>
+        const targetYear = 2026;
+        const targetMonths = [4, 5, 6]; 
+        
+        // localStorage에서 기존 데이터 불러오기 (없으면 빈 객체)
+        let busyDates = {};
+        const savedData = localStorage.getItem('tripBusyDates');
+        if (savedData) {
+            const parsedData = JSON.parse(savedData);
+            // JSON은 Set을 지원하지 않으므로 배열을 다시 Set으로 변환
+            for (const date in parsedData) {
+                busyDates[date] = new Set(parsedData[date]);
+            }
+        }
+
+        function saveToLocalStorage() {
+            // Set을 JSON으로 저장하기 위해 배열로 변환
+            const dataToSave = {};
+            for (const date in busyDates) {
+                dataToSave[date] = Array.from(busyDates[date]);
+            }
+            localStorage.setItem('tripBusyDates', JSON.stringify(dataToSave));
+        }
+
+        function renderCalendars() {
+            const container = document.getElementById('calendarContainer');
+            container.innerHTML = '';
+
+            targetMonths.forEach(monthIndex => {
+                const monthDiv = document.createElement('div');
+                monthDiv.className = 'month';
+
+                const title = document.createElement('div');
+                title.className = 'month-title';
+                title.textContent = `${targetYear}년 ${monthIndex + 1}월`;
+                monthDiv.appendChild(title);
+
+                const grid = document.createElement('div');
+                grid.className = 'grid';
+
+                const days = ['일', '월', '화', '수', '목', '금', '토'];
+                days.forEach(day => {
+                    const header = document.createElement('div');
+                    header.className = 'day-header';
+                    header.textContent = day;
+                    grid.appendChild(header);
+                });
+
+                const firstDay = new Date(targetYear, monthIndex, 1).getDay();
+                const lastDate = new Date(targetYear, monthIndex + 1, 0).getDate();
+
+                for (let i = 0; i < firstDay; i++) {
+                    grid.appendChild(document.createElement('div'));
+                }
+
+                for (let date = 1; date <= lastDate; date++) {
+                    const dayDiv = document.createElement('div');
+                    dayDiv.className = 'day';
+                    
+                    const dateString = `${targetYear}-${String(monthIndex + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`;
+                    const currentDayOfWeek = new Date(targetYear, monthIndex, date).getDay();
+                    
+                    const dayNum = document.createElement('div');
+                    dayNum.className = 'day-num';
+                    dayNum.textContent = date;
+                    if (currentDayOfWeek === 0) dayNum.classList.add('sunday');
+                    if (currentDayOfWeek === 6) dayNum.classList.add('saturday');
+                    
+                    dayDiv.appendChild(dayNum);
+
+                    if (busyDates[dateString] && busyDates[dateString].size > 0) {
+                        busyDates[dateString].forEach(name => {
+                            const tag = document.createElement('div');
+                            tag.className = 'busy-tag';
+                            tag.textContent = name;
+                            dayDiv.appendChild(tag);
+                        });
+                    }
+
+                    dayDiv.addEventListener('click', () => {
+                        const nameInput = document.getElementById('personName').value.trim();
+                        if (!nameInput) {
+                            alert('먼저 상단에 이름을 입력해주세요!');
+                            document.getElementById('personName').focus();
+                            return;
+                        }
+
+                        if (!busyDates[dateString]) {
+                            busyDates[dateString] = new Set();
+                        }
+
+                        if (busyDates[dateString].has(nameInput)) {
+                            busyDates[dateString].delete(nameInput);
+                        } else {
+                            busyDates[dateString].add(nameInput);
+                        }
+
+                        saveToLocalStorage(); // 변경될 때마다 로컬 스토리지에 저장
+                        renderCalendars();
+                    });
+
+                    grid.appendChild(dayDiv);
+                }
+
+                monthDiv.appendChild(grid);
+                container.appendChild(monthDiv);
+            });
+        }
+
+        renderCalendars();
+    </script>
+</body>
+</html>
