@@ -77,4 +77,4 @@ with col1:
                     # 검색 실패 시 기존 데이터 유지
                     old_lat = df_members.iloc[idx]["위도"] if idx < len(df_members) else 37.5665
                     old_lng = df_members.iloc[idx]["경도"] if idx < len(df_members) else 126.9780
-                    new_rows.
+                    new_rows
