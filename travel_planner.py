@@ -46,7 +46,14 @@ if not os.path.exists(DATA_FILE):
     pd.DataFrame(initial_members).to_csv(DATA_FILE, index=False)
 
 # 현재 데이터 불러오기
+# 현재 데이터 불러오기
 df_members = pd.read_csv(DATA_FILE)
+
+# 💡 이전 버전의 잔재("출발지(장소/주소)")가 남아있다면 "출발지"로 이름 변경!
+if "출발지(장소/주소)" in df_members.columns:
+    df_members.rename(columns={"출발지(장소/주소)": "출발지"}, inplace=True)
+    df_members.to_csv(DATA_FILE, index=False) # 바뀐 이름으로 덮어쓰기
+
 
 # 추천 여행지
 destinations = [
